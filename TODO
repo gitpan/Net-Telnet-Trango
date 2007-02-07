@@ -1,0 +1,11 @@
+Add additional commands
+
+Make a decoder for the pipe command
+
+Make sure that last_error is used wherever it can be and should be.
+
+Make sure that things that fail don't evaluate true if at all possible.
+
+See what other tests need to be added to the test suite.  The framework is there, but there need to be more tests of the different commands.
+
+$RedRiver$
