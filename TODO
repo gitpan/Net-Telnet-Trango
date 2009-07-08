@@ -8,4 +8,6 @@ Make sure that things that fail don't evaluate true if at all possible.
 
 See what other tests need to be added to the test suite.  The framework is there, but there need to be more tests of the different commands.
 
-$RedRiver$
+Make the _decode_lines be able to take a line without a "\n" at the end.
+
+$RedRiver: TODO,v 1.2 2008/02/08 16:49:09 andrew Exp $

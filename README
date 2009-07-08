@@ -31,8 +31,8 @@ METHODS
         new([Options from Net::Telnet,]
             [Decode => 0,]);
 
-    Same as new from Net::Telnet but sets the default Trango Prompt: '/#>
-    *$/'
+    Same as new from Net::Telnet but sets the default Trango Prompt:
+    '/[\$#]>\s*\Z/'
 
     It also takes an optional parameter 'Decode'. If not defined it defaults
     to 1, if it is set to 0, it will not decode the output and instead
@@ -165,6 +165,11 @@ COMMANDS
     or reads what is already in login_banner() then parses it and sets
     host_type() and firmware_version() as well as login_banner()
 
+  linktest - Link test to SU
+    linktest('suid'[, 'pkt len, bytes'[, '# of pkts'[, '# of cycles']]]);
+
+    Returns a hash reference to the results of the test
+
   su_password - Set the password on SUs connected to the AP.
     su_password('new_password'[, 'suid']) If no suid is specified, the
     default is "all".
@@ -281,16 +286,20 @@ SUPPORT
 
     You can also look for information at:
 
-    * AnnoCPAN: Annotated CPAN documentation
+    *   AnnoCPAN: Annotated CPAN documentation
+
         <http://annocpan.org/dist/Net-Telnet-Trango>
 
-    * CPAN Ratings
+    *   CPAN Ratings
+
         <http://cpanratings.perl.org/d/Net-Telnet-Trango>
 
-    * RT: CPAN's request tracker
+    *   RT: CPAN's request tracker
+
         <http://rt.cpan.org/NoAuth/Bugs.html?Dist=Net-Telnet-Trango>
 
-    * Search CPAN
+    *   Search CPAN
+
         <http://search.cpan.org/dist/Net-Telnet-Trango>
 
 COPYRIGHT AND LICENSE

@@ -1,6 +1,6 @@
 package Net::Telnet::Trango;
 
-# $RedRiver: Trango.pm,v 1.41 2007/02/07 20:08:32 andrew Exp $
+# $RedRiver: Trango.pm,v 1.56 2009/07/08 17:16:41 andrew Exp $
 use strict;
 use warnings;
 use base 'Net::Telnet';
@@ -43,7 +43,7 @@ None
 
 =cut
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 my $EMPTY = q{};
 my $SPACE = q{ };
@@ -61,7 +61,7 @@ my %PRIVATE = (
         [Decode => 0,]);
 
 Same as new from L<Net::Telnet> but sets the default Trango Prompt: 
-'/#> *$/'
+'/[\$#]>\s*\Z/'
 
 It also takes an optional parameter 'Decode'.  If not defined it
 defaults to 1, if it is set to 0, it will not decode the output and
@@ -81,7 +81,7 @@ sub new {
         %args = @_;
     }
 
-    $args{'Prompt'} ||= '/#> *$/';
+    $args{'Prompt'} ||= '/[\$#]>\s*\r?\n?$/';
 
     foreach my $key ( keys %args ) {
         $PRIVATE{$key} = $args{$key};
@@ -112,6 +112,7 @@ sub new {
 #  help [command]
 #  heater [<on temp> <off temp>]
 #  ipconfig [<new ip> <new subnet mask> <new gateway>]
+#  linktest <suid> [<pkt len, bytes> [<# of pkts> [<# of cycle>]]]
 #  log [<# of entries, 1..179>]
 #  log <sum> <# of entries, 1..179>
 #  logout
@@ -322,6 +323,7 @@ Returns 1 on success, undef on failure.
 
 my $success  = 'Success\\.';
 my %COMMANDS = (
+    _clear      => { String => "\n" },
     tftpd       => { decode    => 'all',       expect          => $success },
     ver         => { decode    => 'all' },
     sysinfo     => { decode    => 'all',       expect          => $success },
@@ -342,6 +344,7 @@ my %COMMANDS = (
       { String => 'su testrflink', decode => 'each', expect    => $success },
     save_ss     => { String => 'save ss',      expect          => $success },
     opmode      => { decode => 'all',          expect          => $success },
+    arq         => { decode => 'all' },
 );
 
 my %ALIASES = (
@@ -490,7 +493,7 @@ sub parse_login_banner {
 
     my ( $type, $sep1, $subtype, $sep2, $ver ) =
       $banner =~
-      /Welcome to Trango Broadband Wireless (\S+)([\s-]+)(\S+)([\s-]+)(.+)$/i;
+      /Welcome to Trango Broadband Wireless,? (\S+)([\s-]+)(\S+)([\s-]+)(.+)$/i;
 
     $type .= $sep1 . $subtype;
     $ver = $subtype . $sep2 . $ver;
@@ -500,6 +503,41 @@ sub parse_login_banner {
     $self->firmware_version($ver);
 
     return 1;
+}
+
+=pod
+
+=head2 B<linktest> - Link test to SU
+
+linktest('suid'[, 'pkt len, bytes'[, '# of pkts'[, '# of cycles']]]);
+
+Returns a hash reference to the results of the test
+
+=cut
+
+sub linktest
+{
+    my $self    = shift;
+    my $suid    = shift;
+    # These numbers are what I found as defaults when running the command
+    my $pkt_len = shift || 1600;
+    my $pkt_cnt = shift || 500; 
+    my $cycles  = shift || 10;
+
+    my %config  = @_;
+
+    # * 2, one for the FromAP, one FromSU.  Then / 1000 to get to ms.
+    # XXX This might need to be changed, this makes the default timeout the
+    # same as $pkt_len, and that might not be enough at slower speeds.
+    $config{Timeout} ||= int(($pkt_len * $pkt_cnt * $cycles * 2 ) / 1000);
+
+    my $string = join $SPACE, 'linktest', $suid, $pkt_len, $pkt_cnt, $cycles;
+    return $self->cmd(
+        %config,
+        String => $string,
+        decode => 'linktest',
+    );
+
 }
 
 =pod
@@ -666,7 +704,7 @@ sub sudb_add {
     }
 
     my $new_mac = $mac;
-    $new_mac =~ s/[^0-9A-Fa-f]//;
+    $new_mac =~ s/[^0-9A-Fa-f]//g;
     unless ( length $new_mac == 12 ) {
         $self->last_error("Invalid MAC '$mac'");
         return;
@@ -892,6 +930,7 @@ sub cmd {
         $cmd{'String'} .= $SPACE . $cfg{'args'};
     }
 
+    #print "Running cmd $cmd{String}\n";
     my @lines;
     if ( $cfg{'no_prompt'} ) {
         $self->print( $cmd{'String'} );
@@ -902,6 +941,16 @@ sub cmd {
     }
 
     $self->last_lines( \@lines );
+
+    my $last = $self->lastline;
+    my $prompt = $self->prompt;
+    $prompt =~ s{^/}{}xms;
+    $prompt =~ s{/[gixms]*$}{}xms;
+    while (@lines && $last =~ qr($prompt)) {
+        pop @lines;
+        $last = $lines[-1];
+    }
+    $self->last_error($EMPTY);
 
     my $vals = 1;
     if ( $PRIVATE{'Decode'} && $cfg{'decode'} ) {
@@ -917,14 +966,17 @@ sub cmd {
                 $self->last_error("Error decoding maclist");
             }
         }
+        elsif ( $cfg{'decode'} eq 'linktest' ) {
+            $vals = _decode_linktest(@lines);
+            if (! $vals) {
+                $self->last_error("Error decoding linktest");
+            }
+        }
         else {
             $vals = _decode_lines(@lines);
         }
     }
-
     $self->last_vals($vals);
-
-    my $last = $self->lastline;
 
     if ( ( not $cfg{'expect'} ) || $last =~ /$cfg{'expect'}$/ ) {
         if ( $cfg{'cmd_disconnects'} ) {
@@ -944,12 +996,12 @@ sub cmd {
         my $err;
         if (grep { /\[ERR\]/ } @lines) {
             $err = _decode_lines(@lines);
-        }
+        } 
 
-        if (ref $err eq 'HASH' && $err ->{ERR}) {
+        if (ref $err eq 'HASH' && $err->{ERR}) {
             $self->last_error($err->{ERR} );
         } else {
-            $self->last_error("Error with command ($cfg{'String'}): $last");
+            $self->last_error("Error with command ($cmd{'String'}): $last");
         }
         return;
     }
@@ -968,8 +1020,49 @@ sub _decode_lines {
     my $in_key = 0;
     my $in_val = 1;
 
-    foreach my $line (@lines) {
-        next if $line =~ /$success$/;
+    LINE: while (my $line = shift @lines) {
+        next LINE if $line =~ /$success\Z/;
+        next LINE if $line =~ /^ \*+ \s+ \d+ \s+ \*+ \Z/xms;
+
+        # Special decode for sysinfo on a TrangoLink 45
+        if ($line =~ /^(.* Channel \s+ Table):\s*(.*)\Z/xms) {
+            my $key  = $1;
+            my $note = $2;
+
+            my %vals;
+            while ($line = shift @lines) {
+                if ($line =~ /^\Z/) {
+                    $conf{$key} = \%vals;
+                    $conf{$key}{note} = $note;
+                    next LINE;
+                }
+
+                my $decoded = _decode_lines($line);
+                if ($decoded) {
+                    %vals = (%vals, %{ $decoded });
+                }
+            }
+        }
+        # Another special decode for the TrangoLink
+        elsif ($line =~ /^
+            RF \s Band \s \# 
+            (\d+) \s+ 
+            \( ([^\)]+) \) \s*
+            (.*)$
+        /xms) {
+            my $num   = $1;
+            my $band  = $2;
+            my $extra = $3;
+
+            if ($extra =~ /\[/) {
+                my $decoded = _decode_lines($extra);
+                $conf{'RF Band'}{$num} = $decoded;
+            }
+            else {
+                $conf{'RF Band'}{$num}{$extra} = 1;
+            }
+            next LINE;
+        }
 
         my @chars = split //, $line;
 
@@ -1062,6 +1155,42 @@ sub _decode_each_line {
         push @decoded, $decoded if defined $decoded;
     }
     return \@decoded;
+}
+
+#=item _decode_linktest
+
+sub _decode_linktest {
+    my @lines = @_;
+    my %decoded;
+    foreach my $line (@lines) {
+
+        if ($line =~ s/^(\d+) \s+ //xms) {
+            my $line_id = $1;
+			my ($tm, $rt);
+			if ($line =~ s/\s+ (\d+ \s+ \w+) \s* $//xms) {
+				$rt = $1;
+			}
+			if ($line =~ s/\s+ (\d+ \s+ \w+) \s* $//xms) {
+				$tm = $1;
+			}
+
+            my $d = _decode_lines($line. "\n");
+            $decoded{tests}[$line_id] = $d;
+            $decoded{tests}[$line_id]{'time'} = $tm;
+            $decoded{tests}[$line_id]{rate}   = $rt;
+        }
+
+        else {
+            my $d = _decode_lines($line . "\n");
+            if ($d) {
+                while (my ($k, $v) = each %{ $d }) {
+                    $decoded{$k} = $v;
+                }
+           }
+        }
+
+    }
+    return \%decoded;
 }
 
 #=item _decode_sulog
