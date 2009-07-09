@@ -1,6 +1,6 @@
 package Net::Telnet::Trango;
 
-# $RedRiver: Trango.pm,v 1.56 2009/07/08 17:16:41 andrew Exp $
+# $RedRiver: Trango.pm,v 1.57 2009/07/09 21:50:03 andrew Exp $
 use strict;
 use warnings;
 use base 'Net::Telnet';
@@ -43,7 +43,7 @@ None
 
 =cut
 
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 
 my $EMPTY = q{};
 my $SPACE = q{ };
@@ -323,55 +323,54 @@ Returns 1 on success, undef on failure.
 
 my $success  = 'Success\\.';
 my %COMMANDS = (
-    _clear      => { String => "\n" },
-    tftpd       => { decode    => 'all',       expect          => $success },
+    _clear      => { String    => "\n" },
+    tftpd       => { decode    => 'all', expect => $success },
     ver         => { decode    => 'all' },
-    sysinfo     => { decode    => 'all',       expect          => $success },
-    updateflash => { decode    => 'all',       expect          => $success },
-    sulog       => { decode    => 'sulog',     expect          => $success },
-    'exit'      => { no_prompt => 1,           cmd_disconnects => 1 },
-    reboot      => { no_prompt => 1,           cmd_disconnects => 1 },
-    remarks     => { decode    => 'all',       expect          => $success },
-    save_sudb   => { String    => 'save sudb', expect          => $success },
+    sysinfo     => { decode    => 'all', expect => $success },
+    updateflash => { decode    => 'all', expect => $success },
+    sulog       => { decode    => 'sulog', expect => $success },
+    'exit'      => { no_prompt => 1, cmd_disconnects => 1 },
+    reboot      => { no_prompt => 1, cmd_disconnects => 1 },
+    remarks     => { decode    => 'all', expect => $success },
+    save_sudb   => { String    => 'save sudb', expect => $success },
     syslog      => { expect    => $success },
-    'pipe'      => {},                        # XXX needs a special decode
-    maclist     => { decode => 'maclist' },
-    maclist_reset => { String => 'maclist reset', expect       => 'done' },
-    eth_link    => { String => 'eth link',     expect          => $success },
-    su_info     => 
-      { String => 'su info',  decode => 'all', expect          => $success },
+    'pipe'  => {},                        # XXX needs a special decode
+    maclist => { decode => 'maclist' },
+    maclist_reset => { String => 'maclist reset', expect => 'done' },
+    eth_link => { String => 'eth link', expect => $success },
+    su_info  => { String => 'su info',  decode => 'all', expect => $success },
     su_testrflink =>
-      { String => 'su testrflink', decode => 'each', expect    => $success },
-    save_ss     => { String => 'save ss',      expect          => $success },
-    opmode      => { decode => 'all',          expect          => $success },
-    arq         => { decode => 'all' },
+        { String => 'su testrflink', decode => 'each', expect => $success },
+    save_ss => { String => 'save ss', expect => $success },
+    opmode  => { decode => 'all',     expect => $success },
+    arq     => { decode => 'all' },
 );
 
 my %ALIASES = (
-    bye     => 'exit',
-    restart => 'reboot',
-    Host    => 'host',
+    bye               => 'exit',
+    restart           => 'reboot',
+    Host              => 'host',
     save_systemseting => 'save_ss',
 );
 
 my %ACCESS = map { $_ => 1 } qw(
-  firmware_version
-  host_type
-  is_connected
-  logged_in
-  login_banner
-  Timeout
-  last_lines
-  last_vals
-  last_error
-  Decode
+    firmware_version
+    host_type
+    is_connected
+    logged_in
+    login_banner
+    Timeout
+    last_lines
+    last_vals
+    last_error
+    Decode
 );
 
 sub AUTOLOAD {
     my $self = shift;
 
     my ($method) = ( our $AUTOLOAD ) =~ /^.*::(\w+)$/
-      or die "Weird: $AUTOLOAD";
+        or die "Weird: $AUTOLOAD";
 
     if ( exists $ALIASES{$method} ) {
         $method = $ALIASES{$method};
@@ -422,11 +421,11 @@ sub open {
             -match   => '/password: ?$/i',
             -errmode => "return",
         )
-      )
+        )
     {
         $self->last_error( "problem connecting to host ("
-              . $self->host . "): "
-              . $self->lastline );
+                . $self->host . "): "
+                . $self->lastline );
         return;
     }
 
@@ -461,7 +460,7 @@ sub login {
             -match   => $self->prompt,
             -errmode => "return",
         )
-      )
+        )
     {
         $self->last_error( "login ($self->host) failed: " . $self->lastline );
         return;
@@ -491,9 +490,9 @@ sub parse_login_banner {
 
     my $banner = $self->login_banner;
 
-    my ( $type, $sep1, $subtype, $sep2, $ver ) =
-      $banner =~
-      /Welcome to Trango Broadband Wireless,? (\S+)([\s-]+)(\S+)([\s-]+)(.+)$/i;
+    my ( $type, $sep1, $subtype, $sep2, $ver )
+        = $banner
+        =~ /Welcome to Trango Broadband Wireless,? (\S+)([\s-]+)(\S+)([\s-]+)(.+)$/i;
 
     $type .= $sep1 . $subtype;
     $ver = $subtype . $sep2 . $ver;
@@ -515,21 +514,21 @@ Returns a hash reference to the results of the test
 
 =cut
 
-sub linktest
-{
-    my $self    = shift;
-    my $suid    = shift;
+sub linktest {
+    my $self = shift;
+    my $suid = shift;
+
     # These numbers are what I found as defaults when running the command
     my $pkt_len = shift || 1600;
-    my $pkt_cnt = shift || 500; 
+    my $pkt_cnt = shift || 500;
     my $cycles  = shift || 10;
 
-    my %config  = @_;
+    my %config = @_;
 
     # * 2, one for the FromAP, one FromSU.  Then / 1000 to get to ms.
     # XXX This might need to be changed, this makes the default timeout the
     # same as $pkt_len, and that might not be enough at slower speeds.
-    $config{Timeout} ||= int(($pkt_len * $pkt_cnt * $cycles * 2 ) / 1000);
+    $config{Timeout} ||= int( ( $pkt_len * $pkt_cnt * $cycles * 2 ) / 1000 );
 
     my $string = join $SPACE, 'linktest', $suid, $pkt_len, $pkt_cnt, $cycles;
     return $self->cmd(
@@ -563,7 +562,12 @@ sub su_password {
     }
 
     return $self->cmd(
-        String => 'su password ' . $su . $SPACE . $new_pass . $SPACE . $new_pass,
+        String => 'su password ' 
+            . $su 
+            . $SPACE
+            . $new_pass
+            . $SPACE
+            . $new_pass,
         expect => $success,
     );
 }
@@ -605,9 +609,14 @@ sub su_ipconfig {
 
     # su ipconfig <suid> <new ip> <new subnet> <new gateway>
     return $self->cmd(
-        String => 'su ipconfig ' . $suid . $SPACE . $new_ip . $SPACE
-          . $new_subnet . $SPACE
-          . $new_gateway,
+        String => 'su ipconfig ' 
+            . $suid 
+            . $SPACE 
+            . $new_ip 
+            . $SPACE
+            . $new_subnet
+            . $SPACE
+            . $new_gateway,
         expect => $success,
     );
 }
@@ -617,7 +626,7 @@ sub su_ipconfig {
 =head2 B<sudb_view> - Returns the output from the sudb view command
 
 returns a reference to an array of hashes each containing these keys
-'suid', 'type', 'cir', 'mir' and 'mac'
+'suid', 'su2su', 'type', 'cir', 'mir' and 'mac'
 
 =cut
 
@@ -635,16 +644,29 @@ sub sudb_view {
     my @sus;
     foreach ( @{$lines} ) {
         next unless $_;
-        if (/^\[(\d+)\]\s+(\d+)\s+(\d+)\s+(\d+)\s+([0-9A-Fa-f\s]+)$/) {
+        if (/^
+            \[(\d+)\]
+            \s+
+            [[:xdigit:]]{2}
+            ([[:xdigit:]])
+            ([[:xdigit:]])
+            \s+
+            (\d+)
+            \s+
+            ([[:xdigit:]\s]+)
+        $/ixms
+            )
+        {
             my %s = (
-                suid => $1,
-                type => $2,
-                cir  => $3,
-                mir  => $4,
-                mac  => $5,
+                suid  => $1,
+                su2su => $2 ? $2 : undef,
+                type  => $3 == 1 ? 'reg' : $3 == 5 ? 'pri' : $3,
+                cir   => $4,
+                mir   => $5,
+                mac   => $6,
             );
 
-            $s{'mac'} =~ s/\s//g;
+            $s{'mac'} =~ s/\s//gxms;
             $s{'mac'} = uc( $s{'mac'} );
 
             push @sus, \%s;
@@ -711,9 +733,17 @@ sub sudb_add {
     }
     $new_mac = join $SPACE, $new_mac =~ /../g;
 
-    my $string =
-      'sudb add ' . $suid . $SPACE . $type . $SPACE . $cir . $SPACE . $mir . $SPACE
-      . $new_mac;
+    my $string
+        = 'sudb add ' 
+        . $suid 
+        . $SPACE 
+        . $type 
+        . $SPACE 
+        . $cir 
+        . $SPACE 
+        . $mir
+        . $SPACE
+        . $new_mac;
 
     return $self->cmd( String => $string, expect => $success );
 }
@@ -883,16 +913,16 @@ sub cmd {
     my $self = shift;
 
     my @valid_net_telnet_opts = qw(
-      String
-      Output
-      Cmd_remove_mode
-      Errmode
-      Input_record_separator
-      Ors
-      Output_record_separator
-      Prompt
-      Rs
-      Timeout
+        String
+        Output
+        Cmd_remove_mode
+        Errmode
+        Input_record_separator
+        Ors
+        Output_record_separator
+        Prompt
+        Rs
+        Timeout
     );
 
     my %cfg;
@@ -942,11 +972,11 @@ sub cmd {
 
     $self->last_lines( \@lines );
 
-    my $last = $self->lastline;
+    my $last   = $self->lastline;
     my $prompt = $self->prompt;
     $prompt =~ s{^/}{}xms;
     $prompt =~ s{/[gixms]*$}{}xms;
-    while (@lines && $last =~ qr($prompt)) {
+    while ( @lines && $last =~ qr($prompt) ) {
         pop @lines;
         $last = $lines[-1];
     }
@@ -962,13 +992,13 @@ sub cmd {
         }
         elsif ( $cfg{'decode'} eq 'maclist' ) {
             $vals = _decode_maclist(@lines);
-            if (! $vals) {
+            if ( !$vals ) {
                 $self->last_error("Error decoding maclist");
             }
         }
         elsif ( $cfg{'decode'} eq 'linktest' ) {
             $vals = _decode_linktest(@lines);
-            if (! $vals) {
+            if ( !$vals ) {
                 $self->last_error("Error decoding linktest");
             }
         }
@@ -994,13 +1024,14 @@ sub cmd {
     }
     else {
         my $err;
-        if (grep { /\[ERR\]/ } @lines) {
+        if ( grep {/\[ERR\]/} @lines ) {
             $err = _decode_lines(@lines);
-        } 
+        }
 
-        if (ref $err eq 'HASH' && $err->{ERR}) {
-            $self->last_error($err->{ERR} );
-        } else {
+        if ( ref $err eq 'HASH' && $err->{ERR} ) {
+            $self->last_error( $err->{ERR} );
+        }
+        else {
             $self->last_error("Error with command ($cmd{'String'}): $last");
         }
         return;
@@ -1020,18 +1051,18 @@ sub _decode_lines {
     my $in_key = 0;
     my $in_val = 1;
 
-    LINE: while (my $line = shift @lines) {
+LINE: while ( my $line = shift @lines ) {
         next LINE if $line =~ /$success\Z/;
         next LINE if $line =~ /^ \*+ \s+ \d+ \s+ \*+ \Z/xms;
 
         # Special decode for sysinfo on a TrangoLink 45
-        if ($line =~ /^(.* Channel \s+ Table):\s*(.*)\Z/xms) {
+        if ( $line =~ /^(.* Channel \s+ Table):\s*(.*)\Z/xms ) {
             my $key  = $1;
             my $note = $2;
 
             my %vals;
-            while ($line = shift @lines) {
-                if ($line =~ /^\Z/) {
+            while ( $line = shift @lines ) {
+                if ( $line =~ /^\Z/ ) {
                     $conf{$key} = \%vals;
                     $conf{$key}{note} = $note;
                     next LINE;
@@ -1039,22 +1070,26 @@ sub _decode_lines {
 
                 my $decoded = _decode_lines($line);
                 if ($decoded) {
-                    %vals = (%vals, %{ $decoded });
+                    %vals = ( %vals, %{$decoded} );
                 }
             }
         }
+
         # Another special decode for the TrangoLink
-        elsif ($line =~ /^
+        elsif (
+            $line =~ /^
             RF \s Band \s \# 
             (\d+) \s+ 
             \( ([^\)]+) \) \s*
             (.*)$
-        /xms) {
+        /xms
+            )
+        {
             my $num   = $1;
             my $band  = $2;
             my $extra = $3;
 
-            if ($extra =~ /\[/) {
+            if ( $extra =~ /\[/ ) {
                 my $decoded = _decode_lines($extra);
                 $conf{'RF Band'}{$num} = $decoded;
             }
@@ -1164,29 +1199,29 @@ sub _decode_linktest {
     my %decoded;
     foreach my $line (@lines) {
 
-        if ($line =~ s/^(\d+) \s+ //xms) {
+        if ( $line =~ s/^(\d+) \s+ //xms ) {
             my $line_id = $1;
-			my ($tm, $rt);
-			if ($line =~ s/\s+ (\d+ \s+ \w+) \s* $//xms) {
-				$rt = $1;
-			}
-			if ($line =~ s/\s+ (\d+ \s+ \w+) \s* $//xms) {
-				$tm = $1;
-			}
+            my ( $tm, $rt );
+            if ( $line =~ s/\s+ (\d+ \s+ \w+) \s* $//xms ) {
+                $rt = $1;
+            }
+            if ( $line =~ s/\s+ (\d+ \s+ \w+) \s* $//xms ) {
+                $tm = $1;
+            }
 
-            my $d = _decode_lines($line. "\n");
-            $decoded{tests}[$line_id] = $d;
+            my $d = _decode_lines( $line . "\n" );
+            $decoded{tests}[$line_id]         = $d;
             $decoded{tests}[$line_id]{'time'} = $tm;
             $decoded{tests}[$line_id]{rate}   = $rt;
         }
 
         else {
-            my $d = _decode_lines($line . "\n");
+            my $d = _decode_lines( $line . "\n" );
             if ($d) {
-                while (my ($k, $v) = each %{ $d }) {
+                while ( my ( $k, $v ) = each %{$d} ) {
                     $decoded{$k} = $v;
                 }
-           }
+            }
         }
 
     }
@@ -1246,12 +1281,12 @@ sub _decode_maclist {
             }
 
             push @decoded,
-              {
+                {
                 mac  => $mac,
                 loc  => $loc,
                 tm   => $tm,
                 suid => $suid,
-              };
+                };
         }
         elsif ( $line =~ /(\d+)\s+entries/ ) {
             $total_entries = $1;

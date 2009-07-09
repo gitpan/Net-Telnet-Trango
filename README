@@ -183,7 +183,7 @@ COMMANDS
 
   sudb_view - Returns the output from the sudb view command
     returns a reference to an array of hashes each containing these keys
-    'suid', 'type', 'cir', 'mir' and 'mac'
+    'suid', 'su2su', 'type', 'cir', 'mir' and 'mac'
 
   sudb_add - Adds an su to the sudb
     Takes the following paramaters

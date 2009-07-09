@@ -1,5 +1,11 @@
 Revision history for Net-Telnet-Trango
 
+0.03    2009.07.09
+        * Match the su2su field in sudb_view, it is in hex, so \d didn't match
+        * sometimes.  Thanks again to "Steven N. Severinghaus"
+        * More tests that are probably non-functional because I didn't set up
+          a test environment.
+
 0.02    2009.07.08
         * Perltidy and some Perl Critic
         * Changed the prompt to include $> not just #>
@@ -17,4 +23,4 @@ Revision history for Net-Telnet-Trango
 0.01    2007.02.05
         * First version, released on an unsuspecting world.
 
-$RedRiver: Changes,v 1.4 2009/07/08 17:45:58 andrew Exp $
+$RedRiver: Changes,v 1.5 2009/07/09 21:52:47 andrew Exp $
