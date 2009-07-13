@@ -1,6 +1,6 @@
 package Net::Telnet::Trango;
 
-# $RedRiver: Trango.pm,v 1.57 2009/07/09 21:50:03 andrew Exp $
+# $RedRiver: Trango.pm,v 1.58 2009/07/13 16:33:45 andrew Exp $
 use strict;
 use warnings;
 use base 'Net::Telnet';
@@ -43,7 +43,7 @@ None
 
 =cut
 
-our $VERSION = '0.03';
+our $VERSION = '0.04';
 
 my $EMPTY = q{};
 my $SPACE = q{ };
@@ -650,6 +650,8 @@ sub sudb_view {
             [[:xdigit:]]{2}
             ([[:xdigit:]])
             ([[:xdigit:]])
+            \s+
+            (\d+)
             \s+
             (\d+)
             \s+
