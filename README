@@ -104,6 +104,9 @@ COMMANDS
   reboot - Sends a reboot command
     reboots the Trango and closes the connection
 
+  reset <all|0..2> - Sends a reset command
+    resets settings to default
+
   remarks - Set or retrieve the remarks.
     Takes an optional argument, which sets the remarks. If there is no
     argument, returns the current remarks.
@@ -148,8 +151,29 @@ COMMANDS
   save_ss - saves the config.
     Returns 1 on success, undef on failure.
 
-  opmode - sets opmode ap y or returns the opmode
-        $t->opmode([ap y]);
+  set_baseid - sets baseid
+        $t->set_baseid($baseid);
+
+  set_suid - sets baseid
+        $t->set_suid($baseid);
+
+  set_defaultopmode - sets default opmode
+        $t->set_defaultopmode(ap|su);
+
+  opmode - sets or returns the opmode
+        $t->opmode([ap y|su y]);
+
+  freq - sets or returns the freq
+        $channel = '11 v';
+        $t->freq([$channel]);
+
+  freq_writescan - sets the freq writescan
+        $channels = '11 v 11 h 12 v 12 h';
+        $t->freq_writescan($channels);
+
+  freq_scantable - returns the freq scantable
+        $channels = $t->freq_scantable();
+        # now $channels eq '11 v 11 h 12 v 12 h';
 
   open - Open a connection to a Trango AP.
     Calls Net::Telnet::open() then makes sure you get a password prompt so
@@ -175,6 +199,11 @@ COMMANDS
     default is "all".
 
       $t->su_password('good_pass', 5);
+
+  ipconfig - Change IP configuration
+    ipconfig( 'new_ip', 'new_subnet', 'new_gateway' )
+
+      $t->ipconfig( '10.0.1.5', '255.255.255.0', '10.0.1.1' );
 
   su_ipconfig - Change IP configuration on SUs connected to the AP.
     su_ipconfig( 'suid', 'new_ip', 'new_subnet', 'new_gateway' )

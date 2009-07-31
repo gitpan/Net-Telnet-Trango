@@ -1,6 +1,6 @@
 package Net::Telnet::Trango;
 
-# $RedRiver: Trango.pm,v 1.58 2009/07/13 16:33:45 andrew Exp $
+# $RedRiver: Trango.pm,v 1.60 2009/07/31 21:46:07 andrew Exp $
 use strict;
 use warnings;
 use base 'Net::Telnet';
@@ -43,15 +43,10 @@ None
 
 =cut
 
-our $VERSION = '0.04';
+our $VERSION = '0.05';
 
 my $EMPTY = q{};
 my $SPACE = q{ };
-
-my %PRIVATE = (
-    is_connected => 0,
-    logged_in    => 0,
-);
 
 =pod
 
@@ -73,7 +68,7 @@ from the command.
 sub new {
     my $class = shift;
 
-    my %args;
+    my %args = ();
     if ( @_ == 1 ) {
         $args{'Host'} = shift;
     }
@@ -83,14 +78,17 @@ sub new {
 
     $args{'Prompt'} ||= '/[\$#]>\s*\r?\n?$/';
 
-    foreach my $key ( keys %args ) {
-        $PRIVATE{$key} = $args{$key};
-    }
-    $PRIVATE{'Decode'} = 1 unless defined $PRIVATE{'Decode'};
+    my $decode = $args{'Decode'};
     delete $args{'Decode'};
 
     my $self = $class->SUPER::new(%args);
     bless $self if ref $self;
+
+    $args{Decode}       = defined $decode ? $decode : 1;
+    $args{is_connected} = 0;
+    $args{logged_in}    = 0;
+
+    *$self->{net_telnet_trango} = \%args;
 
     return $self;
 }
@@ -259,6 +257,10 @@ the connection
 
 reboots the Trango and closes the connection
 
+=head2 B<reset> <all|0..2> - Sends a reset command
+
+resets settings to default
+
 =head2 B<remarks> - Set or retrieve the remarks.
 
 Takes an optional argument, which sets the remarks.  
@@ -315,9 +317,37 @@ You need to pass in the $suid and it will return the info for that suid.
 
 Returns 1 on success, undef on failure.
 
-=head2 B<opmode> - sets opmode ap y or returns the opmode
+=head2 B<set_baseid> - sets baseid
 
-    $t->opmode([ap y]);
+    $t->set_baseid($baseid);
+
+=head2 B<set_suid> - sets baseid
+
+    $t->set_suid($baseid);
+
+=head2 B<set_defaultopmode> - sets default opmode
+
+    $t->set_defaultopmode(ap|su);
+
+=head2 B<opmode> - sets or returns the opmode
+
+    $t->opmode([ap y|su y]);
+
+=head2 B<freq> - sets or returns the freq
+
+    $channel = '11 v';
+    $t->freq([$channel]);
+
+=head2 B<freq_writescan> - sets the freq writescan
+
+    $channels = '11 v 11 h 12 v 12 h';
+    $t->freq_writescan($channels);
+
+=head2 B<freq_scantable> - returns the freq scantable
+
+    $channels = $t->freq_scantable();
+    # now $channels eq '11 v 11 h 12 v 12 h';
+
 
 =cut
 
@@ -331,19 +361,40 @@ my %COMMANDS = (
     sulog       => { decode    => 'sulog', expect => $success },
     'exit'      => { no_prompt => 1, cmd_disconnects => 1 },
     reboot      => { no_prompt => 1, cmd_disconnects => 1 },
-    remarks     => { decode    => 'all', expect => $success },
-    save_sudb   => { String    => 'save sudb', expect => $success },
-    syslog      => { expect    => $success },
-    'pipe'  => {},                        # XXX needs a special decode
+    'reset'   => {},
+    remarks   => { decode => 'all', expect => $success },
+    save_sudb => { String => 'save sudb', expect => $success },
+    syslog  => { expect => $success },
+    'pipe'  => {},      # XXX needs a special decode
     maclist => { decode => 'maclist' },
     maclist_reset => { String => 'maclist reset', expect => 'done' },
-    eth_link => { String => 'eth link', expect => $success },
-    su_info  => { String => 'su info',  decode => 'all', expect => $success },
+    eth_link      => { String => 'eth link',      expect => $success },
+    su_info => { String => 'su info', decode => 'all', expect => $success },
     su_testrflink =>
         { String => 'su testrflink', decode => 'each', expect => $success },
-    save_ss => { String => 'save ss', expect => $success },
-    opmode  => { decode => 'all',     expect => $success },
-    arq     => { decode => 'all' },
+    save_ss    => { String => 'save ss', expect => $success },
+    set_baseid => {
+        String => 'set baseid',
+        decode => 'all',
+        expect => $success
+    },
+    set_suid => {
+        String => 'set suid',
+        decode => 'all',
+        expect => $success
+    },
+    set_defaultopmode => {
+        String => 'set defaultopmode',
+        decode => 'all',
+        expect => $success
+    },
+    opmode => { decode => 'all',  expect => $success },
+    freq   => { decode => 'freq', expect => $success },
+    freq_writescan =>
+        { String => 'freq writescan', decode => 'all', expect => $success },
+    freq_scantable =>
+        { String => 'freq scantable', decode => 'all', expect => $success },
+    arq => { decode => 'all' },
 );
 
 my %ALIASES = (
@@ -388,8 +439,9 @@ sub AUTOLOAD {
     }
 
     if ( exists $ACCESS{$method} ) {
-        my $prev = $PRIVATE{$method};
-        ( $PRIVATE{$method} ) = @_ if @_;
+        my $s    = *$self->{net_telnet_trango};
+        my $prev = $s->{$method};
+        ( $s->{$method} ) = @_ if @_;
         return $prev;
     }
 
@@ -574,6 +626,42 @@ sub su_password {
 
 =pod
 
+=head2 B<ipconfig> - Change IP configuration
+
+ipconfig( 'new_ip', 'new_subnet', 'new_gateway' )
+
+  $t->ipconfig( '10.0.1.5', '255.255.255.0', '10.0.1.1' );
+
+=cut
+
+sub ipconfig {
+    my $self = shift;
+
+    my $string = join $SPACE, 'ipconfig', @_;
+
+    if ( @_ == 3 ) {
+        $self->print($string);
+        my @lines = $self->waitfor( Match => '/save\s+and\s+activate/', );
+        $self->print('y');
+
+        $self->logged_in(0);
+        $self->is_connected(0);
+
+        foreach my $line (@lines) {
+            if ( $line =~ s/New \s configuration:\s+//xms ) {
+                return _decode_lines($line);
+            }
+        }
+
+        return {};
+    }
+
+    # ipconfig [ <new ip> <new subnet> <new gateway> ]
+    return $self->cmd( String => $string, expect => $success );
+}
+
+=pod
+
 =head2 B<su_ipconfig> - Change IP configuration on SUs connected to the AP.
 
 su_ipconfig( 'suid', 'new_ip', 'new_subnet', 'new_gateway' )
@@ -637,9 +725,8 @@ sub sudb_view {
 
     return unless @{$lines};
 
-    unless ( $PRIVATE{'Decode'} ) {
-        return $lines;
-    }
+    my $s = *$self->{net_telnet_trango};
+    return $lines if !$s->{'Decode'};
 
     my @sus;
     foreach ( @{$lines} ) {
@@ -913,6 +1000,7 @@ command
 
 sub cmd {
     my $self = shift;
+    my $s    = *$self->{net_telnet_trango};
 
     my @valid_net_telnet_opts = qw(
         String
@@ -985,7 +1073,7 @@ sub cmd {
     $self->last_error($EMPTY);
 
     my $vals = 1;
-    if ( $PRIVATE{'Decode'} && $cfg{'decode'} ) {
+    if ( $s->{'Decode'} && $cfg{'decode'} ) {
         if ( $cfg{'decode'} eq 'each' ) {
             $vals = _decode_each_line(@lines);
         }
@@ -1004,9 +1092,15 @@ sub cmd {
                 $self->last_error("Error decoding linktest");
             }
         }
+        elsif ( $cfg{'decode'} eq 'freq' ) {
+            $vals = _decode_freq(@lines);
+        }
         else {
             $vals = _decode_lines(@lines);
         }
+    }
+    if ( ref $vals eq 'HASH' ) {
+        $vals->{_raw} = join q{}, @lines;
     }
     $self->last_vals($vals);
 
@@ -1017,7 +1111,7 @@ sub cmd {
             $self->is_connected(0);
         }
 
-        if ( $PRIVATE{'Decode'} && $cfg{'decode'} ) {
+        if ( $s->{'Decode'} && $cfg{'decode'} ) {
             return $vals;
         }
         else {
@@ -1122,7 +1216,7 @@ LINE: while ( my $line = shift @lines ) {
 
                     if ($val) {
                         $val =~ s/^\s+//;
-                        $val =~ s/\s+$//;
+                        $val =~ s/\s+\.*$//;
                     }
 
                     if ( $key eq 'Checksum' && $last_key ) {
@@ -1163,6 +1257,13 @@ LINE: while ( my $line = shift @lines ) {
         push @vals, $val;
     }
 
+    foreach my $val (@vals) {
+        if ( defined $val && length $val ) {
+            $val =~ s/^\s+//;
+            $val =~ s/\s+\.*$//;
+        }
+    }
+
     if ( @vals == 1 ) {
         $val = $vals[0];
     }
@@ -1189,7 +1290,7 @@ sub _decode_each_line {
     my @decoded;
     foreach my $line (@lines) {
         my $decoded = _decode_lines($line);
-        push @decoded, $decoded if defined $decoded;
+        push @decoded, $decoded if defined $decoded && length $decoded;
     }
     return \@decoded;
 }
@@ -1306,6 +1407,38 @@ sub _decode_maclist {
     else {
         return;
     }
+}
+
+#=item _decode_freq
+
+sub _decode_freq {
+    my @lines   = @_;
+    my $decoded = _decode_lines(@lines);
+
+    if ( $decoded && $decoded->{ERR} ) {
+        return $decoded;
+    }
+
+LINE: foreach my $line (@lines) {
+        if (my ( $channel, $polarity, $freq )
+            = $line =~ /
+            Ch \s+ \#(\d+) 
+            \s+
+            (\w+)
+            \s+
+            \[ (\d+) \s+ MHz\]
+        /ixms
+            )
+        {
+            $decoded = {
+                channel   => $channel,
+                polarity  => $polarity,
+                frequency => $freq,
+            };
+            last LINE;
+        }
+    }
+    return $decoded;
 }
 
 1;    # End of Net::Telnet::Trango
